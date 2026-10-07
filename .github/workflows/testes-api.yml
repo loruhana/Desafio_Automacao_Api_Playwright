@@ -1,0 +1,90 @@
+name: Testes de API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      executar_limite_taxa:
+        description: 'Executar também o teste de limite de taxa (REQ-07: 100 requisições/minuto)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testes-api-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_URL: https://serverest.dev
+
+jobs:
+  suite-funcional:
+    name: Suíte funcional (usuários + JWT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificar tipos (TypeScript)
+        run: npm run typecheck
+
+      - name: Executar testes
+        run: npm test
+
+      - name: Publicar relatório HTML
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-html
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Publicar resultado JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: resultado-junit
+          path: test-results/junit.xml
+          retention-days: 30
+
+  limite-taxa:
+    name: Limite de taxa (execução manual)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.executar_limite_taxa }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Executar teste de limite de taxa
+        run: npm run test:limite-taxa
+
+      - name: Publicar relatório do limite de taxa
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-limite-taxa
+          path: |
+            playwright-report-limite-taxa/
+            test-results-limite-taxa/junit.xml
+          retention-days: 30
